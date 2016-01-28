@@ -1,0 +1,28 @@
+<?php
+
+/**
+ * ProcessWire Sequential Number InputField
+ *
+ * Automatically generates a sequential number. Must not be assigned to more than one template unless you wish to spread out the numbers (they are unique per field, not per template!)
+ *
+ */
+
+class InputfieldSequentialNumber extends InputfieldText {
+
+	public static function getModuleInfo() {
+		return array(
+			'title' => 'Sequential Number',
+			'version' => '0.0.1',
+			'summary' => 'Automatically assign a sequential number'
+			);
+	}
+
+	public function __construct() {
+		parent::__construct();
+		if( ! $this->user->isSuperuser() ) $this->collapsed = Inputfield::collapsedNoLocked;
+		$this->size = 25;
+		/* PW treats a simple zero as empty and ignores it, so we use some trickery */
+		$this->initValue = '0000';
+	}
+
+}
