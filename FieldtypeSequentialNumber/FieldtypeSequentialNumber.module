@@ -1,0 +1,130 @@
+<?php
+
+/**
+ * ProcessWire Fieldtype for sequential numbers.
+ *
+ * Only use every sequential field on a single template unless you wish to spread out the numbers (they are unique per field, not per template!)
+ *
+ */
+
+class FieldtypeSequentialNumber extends Fieldtype {
+
+	public static function getModuleInfo() {
+		return array(
+			'title' => 'Sequential Number',
+			'version' => '0.0.1',
+			'summary' => 'Automatically assign a sequential number',
+			'installs' => 'InputfieldSequentialNumber'
+			);
+	}
+
+	public function __construct()
+	{
+		parent::__construct();
+		$this->padlength = 0;
+		$this->seqpattern = "##";
+	}
+
+	/**
+	 * Our Inputfield is really just a locked InputfieldText
+	 */
+	public function getInputfield(Page $page, Field $field) {
+		$inputfield = $this->wire('modules')->get('InputfieldSequentialNumber');
+		$inputfield->class = $this->className();
+		return $inputfield;
+	}
+	
+	/**
+	 * Database schema is just an auto_increment column
+	 */
+	public function getDatabaseSchema(Field $field) {
+		$schema = parent::getDatabaseSchema($field);
+		$schema['data'] = 'int NOT NULL AUTO_INCREMENT';
+		$schema['keys']['data'] = 'KEY data (data, pages_id)';
+		return $schema;
+	}
+
+	/**
+	 * Build a search query for selectors.
+	 */
+	public function getMatchQuery($query, $table, $subfield, $operator, $value) {
+		$database = $this->wire('database');
+		
+		if( empty($subfield) ) $subfield = "data";
+		$value = $this->extractNumber($this, $value);
+		if( preg_match('/^0+[^0]+$/', $value ) ) $value = preg_replace( '/^0+/', '', $value );
+		
+		return parent::getMatchQuery($query, $table, $subfield, $operator, $value);
+	}
+
+	/**
+	 * Extract number according to pattern and remove leading zeroes.
+	 *
+	 * @returns string extractedNumber
+	 */
+	protected function extractNumber($field, $inp) {
+		if( empty($inp) || $inp == "''" || $inp == '""' ) return '0';
+		if( $field->seqpattern == "##" ) return $inp;
+		
+		$regex = '/^' . str_replace('##', '(\\d+)', $field->seqpattern) . '$/';
+		$matches = array();
+		preg_match($regex, $inp, $matches);
+		if( count($matches) < 2 ) return $inp;
+		return $matches[1];
+	}
+
+	/**
+	 * Prepare value for storage in database
+	 *
+	 * @returns string extractedNumber
+	 */
+	public function ___sleepValue(Page $page, Field $field, $value) {
+		return $this->extractNumber($field, $value);
+	}
+
+	/**
+	 * "Wake up" a sequential number stored in the database and format it according to pattern and padding length.
+	 *
+	 * @returns string formattedNumber
+	 */
+	public function ___wakeupValue(Page $page, Field $field, $value) {
+		if( $field->padlength > 0 && strlen($value) < $field->padlength ) {
+			$value = str_repeat('0', $field->padlength) . $value;
+			$value = substr($value, -1 * $field->padlength);
+		}
+		return preg_replace('/##/', $value, $field->seqpattern);
+	}
+
+	public function sanitizeValue(Page $page, Field $field, $value) {
+		return $value;
+	}
+
+	/**
+	 * Return the fields required to configure an instance of FieldtypeText
+	 *
+	 */
+	public function ___getConfigInputfields(Field $field) {
+		$wrap = new InputfieldWrapper();
+		
+		$f = $this->modules->get('InputfieldInteger');
+		$f->attr('name', 'padlength');
+		$f->label = $this->_("Number length");
+		$f->description = $this->_("Pad number to this many digits using zeroes. E.g. a value of '12' with a padding of '5' will become '00012'.");
+		$f->minValue = 0;
+		$f->maxValue = 15;
+		$f->attr('value', $field->padlength);
+		$f->required = true;
+		$wrap->append($f);
+		
+		$f = $this->modules->get('InputfieldText');
+		$f->attr('name', 'seqpattern');
+		$f->label = $this->_("Pattern");
+		$f->description = $this->_("Pattern used for generating the sequential number. Use ## as placeholder for the number. E.g. a pattern of 'INV-##' will generate a number like 'INV-00012'");
+		$f->size = 40;
+		$f->attr('value', $field->seqpattern);
+		$f->required = true;
+		$wrap->append($f);
+		
+		return $wrap;
+	}
+}
